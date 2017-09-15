@@ -42,6 +42,6 @@ int main()
     errx(1, "ts_streams_write");
   ts_packets_destruct(&packets);
 
-  //ts_streams_debug(&streams, stdout, 0);
+  ts_streams_debug(&streams, stdout, 0);
   ts_streams_destruct(&streams);
 }

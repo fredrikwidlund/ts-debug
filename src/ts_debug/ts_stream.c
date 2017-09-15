@@ -55,14 +55,9 @@ int ts_unit_type_guess(ts_unit *unit)
 
 int ts_unit_write(ts_unit *unit, ts_packet *packet)
 {
-  size_t i;
-  printf("unit %p, size %lu\n", (void *) unit, buffer_size(&unit->data));
-  for (i = 0; i < 16; i ++)
-    printf("%02x\n", ((uint8_t *) packet->payload_data)[i]);
-
   buffer_insert(&unit->data, buffer_size(&unit->data), packet->payload_data, packet->payload_size);
   ts_packet_delete(packet);
-  printf("done\n");
+
   return 0;
 }
 
@@ -121,7 +116,9 @@ int ts_stream_write(ts_stream *stream, ts_packet *packet)
       return 0;
     }
 
-  if (!list_empty(&stream->units) && ((stream->continuity_counter + 1) & 0x0f) != packet->continuity_counter)
+  if (!list_empty(&stream->units) &&
+      packet->adaptation_field_control & 0x01 &&
+      ((stream->continuity_counter + 1) & 0x0f) != packet->continuity_counter)
     {
       ts_packet_delete(packet);
       return -1;
@@ -144,21 +141,12 @@ int ts_stream_write(ts_stream *stream, ts_packet *packet)
       unit = *i;
     }
 
-  printf("write pid %d\n", stream->pid);
   e = ts_unit_write(unit, packet);
   if (e == -1)
     return -1;
 
   if (stream->unit_type == TS_UNIT_TYPE_UNKNOWN)
-    {
-      size_t i;
-
-      ts_stream_type(stream, ts_unit_type_guess(unit));
-      printf("guess pid %d\n", packet->pid);
-
-      for (i = 0; i < 16; i ++)
-        printf("%02x\n", ((uint8_t *) buffer_data(&unit->data))[i]);
-    }
+    ts_stream_type(stream, ts_unit_type_guess(unit));
 
   return 0;
 }

@@ -42,7 +42,7 @@ static ssize_t ts_packet_parse(ts_packet *packet, void *data, size_t size)
     abort();
   memcpy(packet->data, data, packet->size);
 
-  bytes_construct(&b, data, size);
+  bytes_construct(&b, packet->data, packet->size);
   v = bytes_read4(&b);
   packet->transport_error_indicator = bytes_bits(v, 32, 8, 1);
   packet->payload_unit_start_indicator = bytes_bits(v, 32, 9, 1);
