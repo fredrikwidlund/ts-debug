@@ -10,6 +10,7 @@
 
 #include "bytes.h"
 #include "ts_packet.h"
+#include "ts_psi.h"
 #include "ts_stream.h"
 
 /* ts_unit */
@@ -19,25 +20,20 @@ void ts_unit_destruct(ts_unit *unit)
   buffer_destruct(&unit->data);
 }
 
-ts_unit *ts_unit_new(int type)
+ts_unit *ts_unit_new(void)
 {
   ts_unit *unit;
 
   unit = malloc(sizeof *unit);
   if (!unit)
     abort();
-  unit->type = type;
+  unit->complete = 0;
   buffer_construct(&unit->data);
 
   return unit;
 }
 
-void ts_unit_type(ts_unit *unit, int type)
-{
-  unit->type = type;
-}
-
-int ts_unit_type_guess(ts_unit *unit)
+int ts_unit_guess_type(ts_unit *unit)
 {
   uint8_t *p;
 
@@ -45,12 +41,11 @@ int ts_unit_type_guess(ts_unit *unit)
     {
       p = buffer_data(&unit->data);
       if (p[0] == 0x00 && p[1] == 0x00 && p[2] == 0x01)
-        return TS_UNIT_TYPE_PES;
-
-      return TS_UNIT_TYPE_PSI;
+        return TS_STREAM_TYPE_PES;
+      return TS_STREAM_TYPE_PSI;
     }
 
-  return TS_UNIT_TYPE_UNKNOWN;
+  return TS_STREAM_TYPE_UNKNOWN;
 }
 
 int ts_unit_write(ts_unit *unit, ts_packet *packet)
@@ -78,15 +73,16 @@ void ts_stream_destruct(ts_stream *stream)
   list_destruct(&stream->units, ts_stream_units_release);
 }
 
-ts_stream *ts_stream_new(int pid)
+ts_stream *ts_stream_new(ts_streams *streams, int pid)
 {
   ts_stream *stream;
 
   stream = malloc(sizeof *stream);
   if (!stream)
     abort();
+  stream->streams = streams;
   stream->pid = pid;
-  stream->unit_type = TS_UNIT_TYPE_UNKNOWN;
+  stream->type = TS_STREAM_TYPE_UNKNOWN;
   stream->continuity_counter = 0;
   list_construct(&stream->units);
 
@@ -95,28 +91,80 @@ ts_stream *ts_stream_new(int pid)
 
 void ts_stream_type(ts_stream *stream, int type)
 {
-  ts_unit **i;
-
-  if (type == TS_UNIT_TYPE_UNKNOWN)
+  if (stream->type != TS_STREAM_TYPE_UNKNOWN || type == TS_STREAM_TYPE_UNKNOWN)
     return;
+  stream->type = type;
+}
 
-  stream->unit_type = type;
-  list_foreach(&stream->units, i)
-    ts_unit_type(*i, type);
+int ts_streams_lookup_type(ts_streams *streams, int pid)
+{
+  if (pid == 0)
+    return TS_STREAM_TYPE_PSI;
+
+  if (streams->psi.pat.present &&
+      streams->psi.pat.program_pid == pid)
+    return TS_STREAM_TYPE_PSI;
+
+  return TS_STREAM_TYPE_UNKNOWN;
+}
+
+int ts_stream_psi(ts_stream *stream, ts_psi *psi)
+{
+  ts_streams *streams = stream->streams;
+
+  if (psi->pat.present)
+    {
+      if (streams->psi.pat.present &&
+          streams->psi.pat.version != psi->pat.version)
+        return -1;
+      streams->psi.pat = psi->pat;
+    }
+
+  return 0;
+}
+
+int ts_stream_process(ts_stream *stream, ts_unit *unit)
+{
+  ts_psi psi;
+  ssize_t n;
+
+  switch (stream->type)
+    {
+    case TS_STREAM_TYPE_PSI:
+      if (!unit->complete)
+        {
+          n = ts_psi_parse(&psi, buffer_data(&unit->data), buffer_size(&unit->data));
+          if (n == -1)
+            return -1;
+
+          if (n == 1)
+            {
+              unit->complete = 1;
+              return ts_stream_psi(stream, &psi);
+            }
+        }
+      return 0;
+    default:
+      return 0;
+    }
 }
 
 int ts_stream_write(ts_stream *stream, ts_packet *packet)
 {
-  ts_unit **i, *unit;
-  int e;
+  ts_unit *unit;
+  int e, empty;
 
+
+  // ignore NULL packets
   if (packet->pid == 0x1fff)
     {
       ts_packet_delete(packet);
       return 0;
     }
 
-  if (!list_empty(&stream->units) &&
+  empty = list_empty(&stream->units);
+  // validate and set continuity counters
+  if (!empty &&
       packet->adaptation_field_control & 0x01 &&
       ((stream->continuity_counter + 1) & 0x0f) != packet->continuity_counter)
     {
@@ -125,30 +173,32 @@ int ts_stream_write(ts_stream *stream, ts_packet *packet)
     }
   stream->continuity_counter = packet->continuity_counter;
 
+  // create new unit if PUSI is set
+  unit = *(ts_unit **) list_back(&stream->units);
   if (packet->payload_unit_start_indicator)
     {
-      unit = ts_unit_new(stream->unit_type);
+      if (!empty)
+        {
+          unit->complete = 1;
+          e = ts_stream_process(stream, unit);
+          if (e == -1)
+            return -1;
+        }
+      unit = ts_unit_new();
       list_push_back(&stream->units, &unit, sizeof unit);
     }
-  else
+  else if (empty)
     {
-      i = list_back(&stream->units);
-      if (i == list_end(&stream->units))
-        {
-          ts_packet_delete(packet);
-          return 0;
-        }
-      unit = *i;
+      ts_packet_delete(packet);
+      return 0;
     }
 
+  // write packet to stream
   e = ts_unit_write(unit, packet);
   if (e == -1)
     return -1;
 
-  if (stream->unit_type == TS_UNIT_TYPE_UNKNOWN)
-    ts_stream_type(stream, ts_unit_type_guess(unit));
-
-  return 0;
+  return ts_stream_process(stream, unit);
 }
 
 void ts_stream_debug(ts_stream *stream, FILE *f, int indent)
@@ -156,7 +206,7 @@ void ts_stream_debug(ts_stream *stream, FILE *f, int indent)
   ts_unit **i;
   int n;
 
-  (void) fprintf(f, "%*s[pid %d, type %d]\n", indent * 2, "", stream->pid, stream->unit_type);
+  (void) fprintf(f, "%*s[pid %d, type %d]\n", indent * 2, "", stream->pid, stream->type);
   n = 0;
   indent ++;
   list_foreach(&stream->units, i)
@@ -209,7 +259,8 @@ int ts_streams_write(ts_streams *streams, ts_packets *packets)
       stream = ts_streams_lookup(streams, packet->pid);
       if (!stream)
         {
-          stream = ts_stream_new(packet->pid);
+          stream = ts_stream_new(streams, packet->pid);
+          ts_stream_type(stream, ts_streams_lookup_type(streams, packet->pid));
           list_foreach(&streams->streams, i)
             if (stream->pid < (*i)->pid)
               break;

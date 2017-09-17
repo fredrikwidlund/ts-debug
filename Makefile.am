@@ -11,12 +11,14 @@ TS_DEBUG_SOURCE_FILES = \
 src/common/bytes.c \
 src/ts_debug/ts_packet.c \
 src/ts_debug/ts_stream.c \
+src/ts_debug/ts_psi.c \
 src/ts_debug/main.c
 
 TS_DEBUG_HEADER_FILES = \
 src/common/bytes.h \
 src/ts_debug/ts_packet.h \
-src/ts_debug/ts_stream.h
+src/ts_debug/ts_stream.h \
+src/ts_debug/ts_psi.h
 
 bin_ts_debug_SOURCES = $(TS_DEBUG_SOURCE_FILES) $(TS_DEBUG_HEADER_FILES)
 bin_ts_debug_LDADD = -ldynamic

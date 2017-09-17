@@ -1,44 +1,45 @@
 #ifndef TS_STREAM_H_INCLUDED
 #define TS_STREAM_H_INCLUDED
 
-enum ts_unit_type
+enum ts_stream_type
 {
-  TS_UNIT_TYPE_UNKNOWN,
-  TS_UNIT_TYPE_PSI,
-  TS_UNIT_TYPE_PES
+  TS_STREAM_TYPE_UNKNOWN,
+  TS_STREAM_TYPE_PSI,
+  TS_STREAM_TYPE_PES
 };
 
 typedef struct ts_unit ts_unit;
+typedef struct ts_stream ts_stream;
+typedef struct ts_streams ts_streams;
+
 struct ts_unit
 {
-  int    type;
-  buffer data;
+  unsigned    complete:1;
+  buffer      data;
 };
 
-typedef struct ts_stream ts_stream;
 struct ts_stream
 {
-  int    pid;
-  int    continuity_counter;
-  int    unit_type;
-  list   units;
+  ts_streams *streams;
+  int         pid;
+  int         continuity_counter;
+  int         type;
+  list        units;
 };
 
-typedef struct ts_streams ts_streams;
 struct ts_streams
 {
-  list   streams;
+  ts_psi      psi;
+  list        streams;
 };
 
 void       ts_unit_destruct(ts_unit *);
-ts_unit   *ts_unit_new(int);
-void       ts_unit_type(ts_unit *, int);
-int        ts_unit_type_guess(ts_unit *);
+ts_unit   *ts_unit_new(void);
 int        ts_unit_write(ts_unit *, ts_packet *);
 void       ts_unit_debug(ts_unit *, FILE *, int);
 
 void       ts_stream_destruct(ts_stream *);
-ts_stream *ts_stream_new(int);
+ts_stream *ts_stream_new(ts_streams *, int);
 void       ts_stream_type(ts_stream *, int);
 int        ts_stream_write(ts_stream *, ts_packet *);
 void       ts_stream_debug(ts_stream *, FILE *, int);
