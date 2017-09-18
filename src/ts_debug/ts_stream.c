@@ -127,22 +127,23 @@ int ts_stream_process(ts_stream *stream, ts_unit *unit)
 {
   ts_psi psi;
   ssize_t n;
+  int e;
 
   switch (stream->type)
     {
     case TS_STREAM_TYPE_PSI:
-      if (!unit->complete)
-        {
-          n = ts_psi_parse(&psi, buffer_data(&unit->data), buffer_size(&unit->data));
-          if (n == -1)
-            return -1;
+      if (unit->complete)
+        return 0;
 
-          if (n == 1)
-            {
-              unit->complete = 1;
-              return ts_stream_psi(stream, &psi);
-            }
-        }
+      ts_psi_construct(&psi);
+      n = ts_psi_unpack(&psi,  buffer_data(&unit->data), buffer_size(&unit->data));
+      e = n > 0 ? ts_stream_psi(stream, &psi) : 0;
+      ts_psi_destruct(&psi);
+      if (n == -1 || e == -1)
+        return -1;
+
+      if (n > 0)
+        unit->complete = 1;
       return 0;
     default:
       return 0;

@@ -9,7 +9,6 @@
 #include <dynamic.h>
 
 #include "bytes.h"
-#include "ts_packet.h"
 #include "ts_psi.h"
 
 static ssize_t ts_psi_parse_pat(ts_psi *psi, void *data, size_t size, int id_extension, int version)
@@ -77,6 +76,17 @@ static ssize_t ts_psi_parse_pmt(ts_psi *psi, void *data, size_t size, int id_ext
     }
 
   return 1;
+}
+
+void ts_psi_construct(ts_psi *psi)
+{
+  *psi = (ts_psi) {0};
+  list_construct(&psi->pmt.streams);
+}
+
+void ts_psi_destruct(ts_psi *psi)
+{
+  list_destruct(&psi->pmt.streams, NULL);
 }
 
 ssize_t ts_psi_parse(ts_psi *psi, void *data, size_t size)
@@ -151,3 +161,82 @@ ssize_t ts_psi_parse(ts_psi *psi, void *data, size_t size)
 
   return 0;
 }
+
+static ssize_t ts_psi_unpack_pat(ts_psi *psi, void *data, size_t size, int id_extension, int version)
+{
+  return size;
+}
+
+static ssize_t ts_psi_unpack_table_data(ts_psi *psi, void *data, size_t size, int id, int id_extension, int version, int current)
+{
+  if (!current)
+    return size;
+
+  switch (id)
+    {
+    case 0x00:
+      return ts_psi_unpack_pat(psi, data, size, id_extension, version);
+    default:
+      return size;
+    }
+}
+
+ssize_t ts_psi_unpack(ts_psi *psi, void *data, size_t size)
+{
+  bytes b;
+  uint32_t v;
+  size_t len;
+  int id, id_extension, version, current, section, section_last;
+  ssize_t n;
+
+  *psi = (ts_psi) {0};
+
+  bytes_construct(&b, data, size);
+  v = bytes_read1(&b);
+  bytes_read(&b, NULL, v);
+
+  while (bytes_size(&b))
+    {
+      id = bytes_read1(&b);
+      if (id == 0xff)
+        return size;
+
+      v = bytes_read2(&b);
+      if (!bytes_valid(&b))
+        return 0;
+      if (bytes_bits(v, 16, 0, 1) != 0x01 ||
+          bytes_bits(v, 16, 1, 1) != 0x00 ||
+          bytes_bits(v, 16, 2, 2) != 0x03 ||
+          bytes_bits(v, 16, 4, 2) != 0x00)
+        return -1;
+
+      len = bytes_bits(v, 16, 6, 10);
+      if (len < 9)
+        return -1;
+      if (len < bytes_size(&b))
+        return 0;
+      len -= 9;
+
+      id_extension = bytes_read2(&b);
+      v = bytes_read1(&b);
+      if (bytes_bits(v, 8, 0, 2) != 0x03)
+        return -1;
+      version = bytes_bits(v, 8, 2, 5);
+      current = bytes_bits(v, 8, 7, 1);
+      section = bytes_read1(&b);
+      section_last = bytes_read1(&b);
+      n = ts_psi_unpack_table_data(psi, bytes_data(&b), len, id, id_extension, version, current);
+      if (n == -1)
+        return -1;
+      bytes_read(&b, NULL, len);
+
+      if (!bytes_valid(&b))
+        return -1;
+
+      if (section == section_last)
+        return size;
+    }
+
+  return 0;
+}
+
