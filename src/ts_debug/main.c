@@ -11,6 +11,7 @@
 #include "bytes.h"
 #include "ts_packet.h"
 #include "ts_psi.h"
+#include "ts_pes.h"
 #include "ts_stream.h"
 
 int main()
