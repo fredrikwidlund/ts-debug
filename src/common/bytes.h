@@ -16,6 +16,7 @@ void      bytes_read(bytes *, void **, size_t);
 uint8_t   bytes_read1(bytes *);
 uint16_t  bytes_read2(bytes *);
 uint32_t  bytes_read4(bytes *);
+uint32_t  bytes_read5(bytes *);
 uint64_t  bytes_read6(bytes *);
 uint64_t  bytes_read8(bytes *);
 uint64_t  bytes_bits(uint64_t, int, int, int);

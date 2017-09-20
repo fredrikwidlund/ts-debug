@@ -60,7 +60,10 @@ int ts_unit_write(ts_unit *unit, ts_packet *packet)
 
 void ts_unit_debug(ts_unit *unit, FILE *f, int indent)
 {
-  (void) fprintf(f, "%*s[size %lu]\n", indent * 2, "", buffer_size(&unit->data));
+  if (unit->unpacked)
+    ts_pes_debug(&unit->pes, f, indent);
+  else
+    (void) fprintf(f, "%*s[size %lu, complete %u]\n", indent * 2, "", buffer_size(&unit->data), unit->complete);
 }
 
 /* ts_stream */
@@ -179,6 +182,7 @@ int ts_stream_process(ts_stream *stream, ts_unit *unit)
       n = ts_pes_unpack(&unit->pes, buffer_data(&unit->data), buffer_size(&unit->data));
       if (n == -1)
         return -1;
+      unit->unpacked = 1;
       return 0;
     default:
       return 0;

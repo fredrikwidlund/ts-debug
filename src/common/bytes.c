@@ -87,6 +87,11 @@ uint32_t bytes_read4(bytes *b)
   return ((uint32_t) bytes_read2(b) << 16) + bytes_read2(b);
 }
 
+uint32_t bytes_read5(bytes *b)
+{
+  return ((uint64_t) bytes_read1(b) << 32) + bytes_read4(b);
+}
+
 uint64_t bytes_read6(bytes *b)
 {
   return ((uint64_t) bytes_read2(b) << 32) + bytes_read4(b);

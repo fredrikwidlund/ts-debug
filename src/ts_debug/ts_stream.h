@@ -15,6 +15,7 @@ typedef struct ts_streams ts_streams;
 struct ts_unit
 {
   unsigned    complete:1;
+  unsigned    unpacked:1;
   ts_pes      pes;
   buffer      data;
 };
