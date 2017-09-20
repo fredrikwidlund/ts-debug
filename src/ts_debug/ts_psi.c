@@ -11,6 +11,24 @@
 #include "bytes.h"
 #include "ts_psi.h"
 
+/* internals */
+
+static void buffer_debug(FILE *f, buffer *b)
+{
+  size_t i, size;
+  uint8_t *data;
+
+  data = buffer_data(b);
+  size = buffer_size(b);
+  (void) fprintf(f, "[%lu]", size);
+  for (i = 0; i < size; i ++)
+    {
+      (void) fprintf(f, "%s", i % 16 ? " " : "\n");
+      (void) fprintf(f, "0x%02x", data[i]);
+    }
+  (void) fprintf(f, "\n");
+}
+
 static ssize_t ts_psi_unpack_pmt(ts_psi *psi, void *data, size_t size, int id_extension, int version)
 {
   bytes b;
@@ -77,6 +95,18 @@ static ssize_t ts_psi_unpack_pat(ts_psi *psi, void *data, size_t size, int id_ex
     }
 
   return bytes_valid(&b) ? (ssize_t) size : -1;
+}
+
+static ssize_t ts_psi_pack_pat(ts_psi *psi, bytes *b)
+{
+  uint32_t v;
+
+  v = bytes_write_bits(psi->pat.program_number, 32, 0, 16);
+  v |= bytes_write_bits(0x07, 32, 16, 3);
+  v |= bytes_write_bits(psi->pat.program_pid, 32, 19, 13);
+  bytes_write32(b, v);
+
+  return 4;
 }
 
 static ssize_t ts_psi_unpack_table_data(ts_psi *psi, void *data, size_t size, int id, int id_extension, int version)
@@ -171,3 +201,45 @@ ssize_t ts_psi_unpack(ts_psi *psi, void *data, size_t size)
   return 0;
 }
 
+ssize_t ts_psi_pack(ts_psi *psi, void **data, size_t *size, int content_type)
+{
+  buffer buffer, content;
+  uint64_t v;
+  bytes b, c;
+
+  switch (content_type)
+    {
+    case 0x00:
+      buffer_construct(&content);
+      bytes_construct_buffer(&c, &content);
+      ts_psi_pack_pat(psi, &c);
+      break;
+    }
+
+  buffer_construct(&buffer);
+  bytes_construct_buffer(&b, &buffer);
+  bytes_write8(&b, 0);
+  bytes_write8(&b, 0);
+
+  v =
+    bytes_write_bits(1, 16, 0, 1) |
+    bytes_write_bits(1, 16, 1, 1) |
+    bytes_write_bits(3, 16, 2, 2) |
+    bytes_write_bits(0, 16, 4, 2) |
+    bytes_write_bits(bytes_size(&c), 16, 6, 10);
+  bytes_write16(&b, v);
+
+  buffer_debug(stderr, b.buffer);
+  buffer_debug(stderr, c.buffer);
+
+  return -1;
+  /*
+  switch (content_type)
+    {
+    case 0x00:
+      return ts_psi_pack_pat(psi, data, size);
+    default:
+      return -1;
+    }
+  */
+}

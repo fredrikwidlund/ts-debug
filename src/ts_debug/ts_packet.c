@@ -135,6 +135,15 @@ int ts_packets_write(ts_packets *packets, void *data, size_t size)
   return 0;
 }
 
+int ts_packets_pack(ts_packets *packets, void **data, size_t *size)
+{
+  (void) packets;
+  *data = NULL;
+  *size = 0;
+
+  return 0;
+}
+
 ts_packet *ts_packets_read(ts_packets *packets)
 {
   ts_packet **i, *packet;

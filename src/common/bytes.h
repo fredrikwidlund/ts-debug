@@ -4,9 +4,12 @@
 typedef struct bytes bytes;
 struct bytes
 {
+  buffer  *buffer;
   uint8_t *base;
   uint8_t *end;
 };
+
+void      bytes_construct_buffer(bytes *, buffer *);
 
 void      bytes_construct(bytes *, void *, size_t);
 void      bytes_truncate(bytes *, size_t);
@@ -23,5 +26,10 @@ uint64_t  bytes_bits(uint64_t, int, int, int);
 uint8_t   bytes_index(bytes *, size_t);
 void      bytes_rest(bytes *, void **, size_t *);
 void     *bytes_data(bytes *);
+
+uint64_t  bytes_write_bits(uint64_t, int, int, int);
+void      bytes_write8(bytes *, uint8_t);
+void      bytes_write16(bytes *, uint16_t);
+void      bytes_write32(bytes *, uint32_t);
 
 #endif /* BYTES_H_INCLUDED */

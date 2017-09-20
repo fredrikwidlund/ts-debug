@@ -40,6 +40,7 @@ void       ts_packet_delete(ts_packet *);
 void       ts_packets_construct(ts_packets *);
 void       ts_packets_destruct(ts_packets *);
 int        ts_packets_write(ts_packets *, void *, size_t);
+int        ts_packets_pack(ts_packets *, void **, size_t *);
 ts_packet *ts_packets_read(ts_packets *);
 
 #endif /* TS_PACKET_H_INCLUDED */

@@ -13,6 +13,24 @@
 #include "ts_psi.h"
 #include "ts_pes.h"
 #include "ts_stream.h"
+#include "ts_streams.h"
+
+/* internals */
+
+static int ts_stream_complete(ts_stream *stream)
+{
+  ts_unit *unit;
+
+  if (list_empty(&stream->units))
+    return 0;
+
+  unit = *(ts_unit **) list_back(&stream->units);
+  if (unit->complete)
+    return 0;
+
+  unit->complete = 1;
+  return ts_stream_process(stream, unit);
+}
 
 /* ts_unit */
 
@@ -194,6 +212,8 @@ int ts_stream_write(ts_stream *stream, ts_packet *packet)
   ts_unit *unit;
   int e, empty;
 
+  if (!packet)
+    return ts_stream_complete(stream);
 
   // ignore NULL packets
   if (packet->pid == 0x1fff)
@@ -241,6 +261,24 @@ int ts_stream_write(ts_stream *stream, ts_packet *packet)
   return ts_stream_process(stream, unit);
 }
 
+int ts_stream_pack(ts_stream *stream, ts_packets *packets)
+{
+  void *data;
+  size_t size;
+  ssize_t n;
+
+  switch (stream->type)
+    {
+    case TS_STREAM_TYPE_PSI:
+      n = ts_psi_pack(&stream->streams->psi, &data, &size, stream->content_type);
+      if (n == -1)
+        return -1;
+      (void) packets;
+      printf("got %ld\n", n);
+      break;
+    }
+}
+
 void ts_stream_debug(ts_stream *stream, FILE *f, int indent)
 {
   ts_unit **i;
@@ -253,92 +291,6 @@ void ts_stream_debug(ts_stream *stream, FILE *f, int indent)
     {
       (void) fprintf(f, "%*s[unit %d]\n", indent * 2, "", n);
       ts_unit_debug(*i, f, indent + 1);
-      n ++;
-    }
-}
-
-/* ts_streams */
-
-static void ts_streams_streams_release(void *object)
-{
-  ts_stream_destruct(*(ts_stream **) object);
-}
-
-void ts_streams_construct(ts_streams *streams)
-{
-  ts_psi_construct(&streams->psi);
-  list_construct(&streams->streams);
-}
-
-void ts_streams_destruct(ts_streams *streams)
-{
-  list_destruct(&streams->streams, ts_streams_streams_release);
-}
-
-ts_stream *ts_streams_create(ts_streams *streams, int pid, int type, int content_type)
-{
-  ts_stream *stream, **i;
-
-  stream = malloc(sizeof *stream);
-  if (!stream)
-    abort();
-  if (pid == 0 && type == TS_STREAM_TYPE_UNKNOWN)
-    type = TS_STREAM_TYPE_PSI;
-  ts_stream_construct(stream, streams, pid, type, content_type);
-  list_foreach(&streams->streams, i)
-    if (stream->pid < (*i)->pid)
-      break;
-  list_insert(i, &stream, sizeof stream);
-  return stream;
-}
-
-ts_stream *ts_streams_lookup(ts_streams *streams, int pid)
-{
-  ts_stream **i;
-
-  list_foreach(&streams->streams, i)
-    if ((*i)->pid == pid)
-      return *i;
-  return NULL;
-}
-
-int ts_streams_write(ts_streams *streams, ts_packets *packets)
-{
-  ts_packet *packet;
-  ts_stream *stream;
-  int e;
-
-  while (1)
-    {
-      packet = ts_packets_read(packets);
-      if (!packet)
-        return 0;
-
-      if (packet->pid == 0x1fff)
-        continue;
-
-      stream = ts_streams_lookup(streams, packet->pid);
-      if (!stream)
-        stream = ts_streams_create(streams, packet->pid, TS_STREAM_TYPE_UNKNOWN, 0);
-
-      e = ts_stream_write(stream, packet);
-      if (e == -1)
-        return -1;
-    }
-
-  return 0;
-}
-
-void ts_streams_debug(ts_streams *streams, FILE *f, int indent)
-{
-  ts_stream **i;
-  int n;
-
-  n = 0;
-  list_foreach(&streams->streams, i)
-    {
-      (void) fprintf(f, "%*s[stream %d]\n", indent * 2, "", n);
-      ts_stream_debug(*i, f, indent + 1);
       n ++;
     }
 }
