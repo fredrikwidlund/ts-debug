@@ -15,10 +15,10 @@
 
 static void ts_packets_packets_release(void *object)
 {
-  ts_packet *p = *(ts_packet **) object;
+  ts_packet *packet = *(ts_packet **) object;
 
-  ts_packet_destruct(p);
-  free(p);
+  ts_packet_destruct(packet);
+  free(packet);
 }
 
 /* ts_packets */
