@@ -20,6 +20,7 @@
 int main()
 {
   ts_packets packets;
+  ts_packet *packet;
   char block[1048476];
   //char *p;
   //void *data;
@@ -51,6 +52,18 @@ int main()
   if (e == -1)
     errx(1, "ts_streams_write");
   */
+
+  while (1)
+    {
+      packet = ts_packets_read(&packets);
+      if (!packet)
+        break;
+
+      if (packet->adaptation_field.pcr_flag)
+        fprintf(stdout, "PCR %f\n", packet->adaptation_field.pcr / 27000000.);
+      ts_packet_destruct(packet);
+      free(packet);
+    }
 
   ts_packets_destruct(&packets);
 
