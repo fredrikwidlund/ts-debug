@@ -12,15 +12,16 @@
 
 /* internals */
 
-static void ts_psi_pmt_debug(ts_psi_pmt *pms, FILE *f, int indent)
+static void ts_psi_pmt_debug(ts_psi_pmt *pmt, FILE *f, int indent)
 {
   ts_psi_pmt_stream *stream;
 
-  if (!pms->present)
+  if (!pmt->present)
     return;
-  (void) fprintf(f, "%*s[pmt]\n", indent * 2, "");
+  (void) fprintf(f, "%*s[pmt id extension %d, version %d, pcr pid %d]\n", indent * 2, "",
+                 pmt->id_extension, pmt->version, pmt->pcr_pid);
   indent ++;
-  list_foreach(&pms->streams, stream)
+  list_foreach(&pmt->streams, stream)
     (void) fprintf(f, "%*s[stream %d, type %d]\n", indent * 2, "", stream->pid, stream->type);
 }
 
@@ -29,11 +30,11 @@ static void ts_psi_pat_debug(ts_psi_pat *pat, FILE *f, int indent)
   if (!pat->present)
     return;
 
-  (void) fprintf(f, "%*s[pat id extension %d, version %d, program number %d, pid %d]\n", indent * 2, "",
+  (void) fprintf(f, "%*s[pat id extension %d, version %d, program number %d, pmt pid %d]\n", indent * 2, "",
                  pat->id_extension, pat->version, pat->program_number, pat->program_pid);
 }
 
-static ssize_t ts_psi_unpack_pmt(ts_psi *psi, void *data, size_t size, int id_extension, int version)
+static ssize_t ts_psi_pmt_unpack(ts_psi_pmt *pmt, void *data, size_t size, int id_extension, int version)
 {
   stream s;
   uint32_t v;
@@ -53,10 +54,10 @@ static ssize_t ts_psi_unpack_pmt(ts_psi *psi, void *data, size_t size, int id_ex
   len = stream_read_bits(v, 32, 22, 10);
   stream_read(&s, NULL, len);
 
-  psi->pmt.present = 1;
-  psi->pmt.id_extension = id_extension;
-  psi->pmt.version = version;
-  psi->pmt.pcr_pid = pid;
+  pmt->present = 1;
+  pmt->id_extension = id_extension;
+  pmt->version = version;
+  pmt->pcr_pid = pid;
 
   while (stream_size(&s))
     {
@@ -72,7 +73,7 @@ static ssize_t ts_psi_unpack_pmt(ts_psi *psi, void *data, size_t size, int id_ex
       pid = stream_read_bits(v, 32, 3, 13);
       len = stream_read_bits(v, 32, 22, 10);
       stream_read(&s, NULL, len);
-      list_push_back(&psi->pmt.streams, (ts_psi_pmt_stream[]){{.type = type, .pid = pid}}, sizeof (ts_psi_pmt_stream));
+      list_push_back(&pmt->streams, (ts_psi_pmt_stream[]){{.type = type, .pid = pid}}, sizeof (ts_psi_pmt_stream));
     }
 
   valid = stream_valid(&s);
@@ -82,7 +83,7 @@ static ssize_t ts_psi_unpack_pmt(ts_psi *psi, void *data, size_t size, int id_ex
 
 /* internals */
 
-static ssize_t ts_psi_unpack_pat(ts_psi *psi, void *data, size_t size, int id_extension, int version)
+static ssize_t ts_psi_pat_unpack(ts_psi_pat *pat, void *data, size_t size, int id_extension, int version)
 {
   stream s;
   uint32_t v;
@@ -91,7 +92,7 @@ static ssize_t ts_psi_unpack_pat(ts_psi *psi, void *data, size_t size, int id_ex
   stream_construct(&s, data, size);
   while (stream_size(&s))
     {
-      if (psi->pat.present)
+      if (pat->present)
         return -1;
       v = stream_read32(&s);
       if (stream_read_bits(v, 32, 16, 3) != 0x07)
@@ -102,11 +103,11 @@ static ssize_t ts_psi_unpack_pat(ts_psi *psi, void *data, size_t size, int id_ex
       num = stream_read_bits(v, 32, 0, 16);
       pid = stream_read_bits(v, 32, 19, 13);
 
-      psi->pat.present = 1;
-      psi->pat.id_extension = id_extension;
-      psi->pat.version = version;
-      psi->pat.program_number = num;
-      psi->pat.program_pid = pid;
+      pat->present = 1;
+      pat->id_extension = id_extension;
+      pat->version = version;
+      pat->program_number = num;
+      pat->program_pid = pid;
     }
 
   valid = stream_valid(&s);
@@ -133,9 +134,9 @@ static ssize_t ts_psi_unpack_table_data(ts_psi *psi, void *data, size_t size, in
   switch (id)
     {
     case 0x00:
-      return ts_psi_unpack_pat(psi, data, size, id_extension, version);
+      return ts_psi_pat_unpack(&psi->pat, data, size, id_extension, version);
     case 0x02:
-      return ts_psi_unpack_pmt(psi, data, size, id_extension, version);
+      return ts_psi_pmt_unpack(&psi->pmt, data, size, id_extension, version);
     default:
       return size;
     }
