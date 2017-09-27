@@ -38,13 +38,14 @@ int main()
     }
 
   ts_streams_construct(&streams);
-  e = ts_streams_write(&streams, &packets);
-  if (e == 0)
-    e = ts_streams_write(&streams, NULL);
+  e = ts_streams_unpack(&streams, &packets);
+  if (e != -1)
+    e = ts_streams_unpack(&streams, NULL);
   if (e == -1)
     errx(1, "ts_streams_write");
 
   ts_packets_destruct(&packets);
+
   ts_streams_debug(&streams, stdout, 0);
   ts_streams_destruct(&streams);
 }

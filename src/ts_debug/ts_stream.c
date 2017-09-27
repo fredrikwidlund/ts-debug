@@ -17,21 +17,6 @@
 
 /* internals */
 
-static int ts_stream_complete(ts_stream *stream)
-{
-  ts_unit *unit;
-
-  if (list_empty(&stream->units))
-    return 0;
-
-  unit = *(ts_unit **) list_back(&stream->units);
-  if (unit->complete)
-    return 0;
-
-  unit->complete = 1;
-  return ts_stream_process(stream, unit);
-}
-
 /* ts_unit */
 
 void ts_unit_destruct(ts_unit *unit)
@@ -68,12 +53,11 @@ int ts_unit_guess_type(ts_unit *unit)
   return TS_STREAM_TYPE_UNKNOWN;
 }
 
-int ts_unit_write(ts_unit *unit, ts_packet *packet)
+ssize_t ts_unit_unpack(ts_unit *unit, ts_packet *packet)
 {
   buffer_insert(&unit->data, buffer_size(&unit->data), packet->data, packet->size);
-  ts_packet_delete(packet);
 
-  return 0;
+  return 1;
 }
 
 void ts_unit_debug(ts_unit *unit, FILE *f, int indent)
@@ -88,8 +72,64 @@ void ts_unit_debug(ts_unit *unit, FILE *f, int indent)
 
 static void ts_stream_units_release(void *object)
 {
-  ts_unit_destruct(*(ts_unit **) object);
+  ts_unit *unit = *(ts_unit **) object;
+
+  ts_unit_destruct(unit);
+  ts_pes_destruct(&unit->pes);
+  free(unit);
 }
+
+static int ts_stream_process(ts_stream *stream, ts_unit *unit)
+{
+  ts_psi psi;
+  ssize_t n;
+  int e;
+
+  switch (stream->type)
+    {
+    case TS_STREAM_TYPE_PSI:
+      if (unit->complete)
+        return 0;
+      ts_psi_construct(&psi);
+      n = ts_psi_unpack(&psi, buffer_data(&unit->data), buffer_size(&unit->data));
+      e = 0;
+      if (n > 0)
+        e = ts_streams_psi(stream->streams, &psi);
+      ts_psi_destruct(&psi);
+      if (n == -1 || e == -1)
+        return -1;
+      if (n > 0)
+        unit->complete = 1;
+      return 0;
+    case TS_STREAM_TYPE_PES:
+      if (!unit->complete)
+        return 0;
+      n = ts_pes_unpack(&unit->pes, buffer_data(&unit->data), buffer_size(&unit->data));
+      if (n == -1)
+        return -1;
+      unit->unpacked = 1;
+      return 0;
+    default:
+      return 0;
+    }
+}
+
+static int ts_stream_complete(ts_stream *stream)
+{
+  ts_unit *unit;
+
+  if (list_empty(&stream->units))
+    return 0;
+
+  unit = *(ts_unit **) list_back(&stream->units);
+  if (unit->complete)
+    return 0;
+
+  unit->complete = 1;
+  return ts_stream_process(stream, unit);
+}
+
+/* ts_stream */
 
 void ts_stream_construct(ts_stream *stream, ts_streams *streams, int pid, int type, int content_type)
 {
@@ -127,89 +167,10 @@ int ts_stream_type(ts_stream *stream, int type, int content_type)
   return 0;
 }
 
-int ts_streams_type(ts_streams *streams, int pid, int type, int content_type)
-{
-  ts_stream *stream;
-
-  stream = ts_streams_lookup(streams, pid);
-  if (stream)
-    return ts_stream_type(stream, type, content_type);
-  else
-    {
-      (void) ts_streams_create(streams, pid, type, content_type);
-      return 0;
-    }
-}
-
-int ts_streams_psi(ts_streams *streams, ts_psi *psi)
-{
-  ts_psi_pmt_stream *i;
-  int e;
-
-  if (psi->pat.present && !streams->psi.pat.present)
-    {
-      streams->psi.pat = psi->pat;
-      e = ts_streams_type(streams, streams->psi.pat.program_pid, TS_STREAM_TYPE_PSI, 0);
-      if (e == -1)
-        return -1;
-    }
-
-  if (psi->pmt.present && !streams->psi.pmt.present)
-    {
-      streams->psi.pmt.present = 1;
-      streams->psi.pmt.id_extension = psi->pmt.id_extension;
-      streams->psi.pmt.version = psi->pmt.version;
-      streams->psi.pmt.pcr_pid = psi->pmt.pcr_pid;
-      list_foreach(&psi->pmt.streams, i)
-        {
-          e = ts_streams_type(streams, i->pid, TS_STREAM_TYPE_PES, i->type);
-          if (e == -1)
-            return -1;
-          list_push_back(&streams->psi.pmt.streams, i, sizeof i);
-        }
-    }
-
-  return 0;
-}
-
-int ts_stream_process(ts_stream *stream, ts_unit *unit)
-{
-  ts_psi psi;
-  ssize_t n;
-  int e;
-
-  switch (stream->type)
-    {
-    case TS_STREAM_TYPE_PSI:
-      if (unit->complete)
-        return 0;
-      ts_psi_construct(&psi);
-      n = ts_psi_unpack(&psi, buffer_data(&unit->data), buffer_size(&unit->data));
-      e = 0;
-      if (n > 0)
-        e = ts_streams_psi(stream->streams, &psi);
-      ts_psi_destruct(&psi);
-      if (n == -1 || e == -1)
-        return -1;
-      if (n > 0)
-        unit->complete = 1;
-      return 0;
-    case TS_STREAM_TYPE_PES:
-      if (!unit->complete)
-        return 0;
-      n = ts_pes_unpack(&unit->pes, buffer_data(&unit->data), buffer_size(&unit->data));
-      if (n == -1)
-        return -1;
-      unit->unpacked = 1;
-      return 0;
-    default:
-      return 0;
-    }
-}
-
-int ts_stream_write(ts_stream *stream, ts_packet *packet)
+ssize_t ts_stream_unpack(ts_stream *stream, ts_packet *packet)
 {
   ts_unit *unit;
+  ssize_t n;
   int e, empty;
 
   if (!packet)
@@ -217,20 +178,14 @@ int ts_stream_write(ts_stream *stream, ts_packet *packet)
 
   // ignore NULL packets
   if (packet->pid == 0x1fff)
-    {
-      ts_packet_delete(packet);
-      return 0;
-    }
+    return 0;
 
   empty = list_empty(&stream->units);
   // validate and set continuity counters
-  if (!empty &&
-      packet->adaptation_field_control & 0x01 &&
+  if (!empty && packet->adaptation_field_control & 0x01 &&
       ((stream->continuity_counter + 1) & 0x0f) != packet->continuity_counter)
-    {
-      ts_packet_delete(packet);
-      return -1;
-    }
+    return -1;
+
   stream->continuity_counter = packet->continuity_counter;
 
   // create new unit if PUSI is set
@@ -248,14 +203,11 @@ int ts_stream_write(ts_stream *stream, ts_packet *packet)
       list_push_back(&stream->units, &unit, sizeof unit);
     }
   else if (empty)
-    {
-      ts_packet_delete(packet);
-      return 0;
-    }
+    return 0;
 
   // write packet to stream
-  e = ts_unit_write(unit, packet);
-  if (e == -1)
+  n = ts_unit_unpack(unit, packet);
+  if (n == -1)
     return -1;
 
   return ts_stream_process(stream, unit);

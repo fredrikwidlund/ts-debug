@@ -13,7 +13,7 @@
 
 /* internals */
 
-static void ts_packets_packets_release(void *object)
+static void ts_packets_list_release(void *object)
 {
   ts_packet *packet = *(ts_packet **) object;
 
@@ -26,12 +26,12 @@ static void ts_packets_packets_release(void *object)
 void ts_packets_construct(ts_packets *packets)
 {
   buffer_construct(&packets->in);
-  list_construct(&packets->packets);
+  list_construct(&packets->list);
 }
 
 void ts_packets_destruct(ts_packets *packets)
 {
-  list_destruct(&packets->packets, ts_packets_packets_release);
+  list_destruct(&packets->list, ts_packets_list_release);
   buffer_destruct(&packets->in);
 }
 
@@ -52,7 +52,7 @@ ssize_t ts_packets_unpack(ts_packets *packets, void *data, size_t size)
       if (e <= 0)
         return -1;
 
-      list_push_back(&packets->packets, &packet, sizeof packet);
+      list_push_back(&packets->list, &packet, sizeof packet);
     }
 
   buffer_erase(&packets->in, 0, buffer_size(&packets->in) - (end - begin));
@@ -68,16 +68,7 @@ ssize_t ts_packets_pack(ts_packets *packets, void **data, size_t *size)
   return 0;
 }
 
-ts_packet *ts_packets_read(ts_packets *packets)
+list *ts_packets_list(ts_packets *packets)
 {
-  ts_packet **i, *packet;
-
-  i = list_front(&packets->packets);
-  if (i == list_end(&packets->packets))
-    return NULL;
-
-  packet = *i;
-  list_erase(i, NULL);
-
-  return packet;
+  return &packets->list;
 }

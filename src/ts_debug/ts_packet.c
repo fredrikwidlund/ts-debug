@@ -50,40 +50,6 @@ static ssize_t ts_adaptation_field_unpack(ts_adaptation_field *af, void *data, s
   return valid ? len + 1 : -1;
 }
 
-/*
-static double ts_demux_parse_pcr(ts_demux *d, bits *b)
-{
-  double pcr_base, pcr_ext;
-
-  (void) d;
-  pcr_base = bits_read(b, 33);
-  (void) bits_read(b, 6);
-  pcr_ext = bits_read(b, 9);
-  return pcr_base / 90000. + pcr_ext / 27000000.;
-  }
-*/
-
-
-/*
- af = bits_subset(b, 0, 8 * len);
-  bits_read_data(b, NULL, len);
-  flags = bits_read(&af, 8);
-  *rai = flags & 0x40 ? 1 : 0;
-  if (flags & 0x10)
-    *pcr = ts_demux_parse_pcr(d, &af);
-  if (flags & 0x08)
-    bits_read_data(&af, NULL, 6);
-  if (flags & 0x04)
-    (void) bits_read(&af, 8);
-  if (flags & 0x02)
-    ts_demux_parse_ebp_marker(d, &af, ebp_marker);
-
-  if (!bits_valid(&af))
-    bits_clear(b);
-}
-
-*/
-
 /* packet */
 
 void ts_packet_construct(ts_packet *packet)
@@ -97,6 +63,7 @@ void ts_packet_destruct(ts_packet *packet)
   ts_packet_construct(packet);
 }
 
+/*
 ts_packet *ts_packet_new(void)
 {
   ts_packet *packet;
@@ -113,6 +80,7 @@ void ts_packet_delete(ts_packet *packet)
   ts_packet_destruct(packet);
   free(packet);
 }
+*/
 
 ssize_t ts_packet_unpack(ts_packet *packet, void *data, size_t size)
 {
