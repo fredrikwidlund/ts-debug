@@ -41,7 +41,7 @@ void       ts_stream_destruct(ts_stream *);
 int        ts_stream_process(ts_stream *, ts_unit *);
 int        ts_stream_type(ts_stream *, int, int);
 int        ts_stream_write(ts_stream *, ts_packet *);
-int        ts_stream_pack(ts_stream *, ts_packets *);
+ssize_t    ts_stream_pack(ts_stream *, ts_packets *);
 void       ts_stream_debug(ts_stream *, FILE *, int);
 
 #endif /* TS_STREAM_H_INCLUDED */

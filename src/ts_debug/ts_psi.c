@@ -8,84 +8,99 @@
 
 #include <dynamic.h>
 
-#include "bytes.h"
 #include "ts_psi.h"
 
 /* internals */
 
-static void buffer_debug(FILE *f, buffer *b)
+static void ts_psi_pmt_debug(ts_psi_pmt *pms, FILE *f, int indent)
 {
-  size_t i, size;
-  uint8_t *data;
+  ts_psi_pmt_stream *stream;
 
-  data = buffer_data(b);
-  size = buffer_size(b);
-  (void) fprintf(f, "[%lu]", size);
-  for (i = 0; i < size; i ++)
-    {
-      (void) fprintf(f, "%s", i % 16 ? " " : "\n");
-      (void) fprintf(f, "0x%02x", data[i]);
-    }
-  (void) fprintf(f, "\n");
+  if (!pms->present)
+    return;
+  (void) fprintf(f, "%*s[pmt]\n", indent * 2, "");
+  indent ++;
+  list_foreach(&pms->streams, stream)
+    (void) fprintf(f, "%*s[stream %d, type %d]\n", indent * 2, "", stream->pid, stream->type);
+}
+
+static void ts_psi_pat_debug(ts_psi_pat *pat, FILE *f, int indent)
+{
+  if (!pat->present)
+    return;
+
+  (void) fprintf(f, "%*s[pat id extension %d, version %d, program number %d, pid %d]\n", indent * 2, "",
+                 pat->id_extension, pat->version, pat->program_number, pat->program_pid);
 }
 
 static ssize_t ts_psi_unpack_pmt(ts_psi *psi, void *data, size_t size, int id_extension, int version)
 {
-  bytes b;
+  stream s;
   uint32_t v;
-  int type, pid;
+  int type, pid, valid;
   size_t len;
 
-  bytes_construct(&b, data, size);
-  v = bytes_read4(&b);
-  if (bytes_bits(v, 32, 0, 3) != 0x07 ||
-      bytes_bits(v, 32, 16, 4) != 0x0f ||
-      bytes_bits(v, 32, 20, 2) != 0x00)
-    return -1;
-  pid = bytes_bits(v, 32, 3, 13);
-  len = bytes_bits(v, 32, 22, 10);
-  bytes_read(&b, NULL, len);
+  stream_construct(&s, data, size);
+  v = stream_read32(&s);
+  if (stream_read_bits(v, 32, 0, 3) != 0x07 ||
+      stream_read_bits(v, 32, 16, 4) != 0x0f ||
+      stream_read_bits(v, 32, 20, 2) != 0x00)
+    {
+      stream_destruct(&s);
+      return -1;
+    }
+  pid = stream_read_bits(v, 32, 3, 13);
+  len = stream_read_bits(v, 32, 22, 10);
+  stream_read(&s, NULL, len);
 
   psi->pmt.present = 1;
   psi->pmt.id_extension = id_extension;
   psi->pmt.version = version;
   psi->pmt.pcr_pid = pid;
 
-  while (bytes_size(&b))
+  while (stream_size(&s))
     {
-      type = bytes_read1(&b);
-      v = bytes_read4(&b);
-      if (bytes_bits(v, 32, 0, 3) != 0x07 ||
-          bytes_bits(v, 32, 16, 4) != 0x0f ||
-          bytes_bits(v, 32, 20, 2) != 0x00)
-        return -1;
-      pid = bytes_bits(v, 32, 3, 13);
-      len = bytes_bits(v, 32, 22, 10);
-      bytes_read(&b, NULL, len);
+      type = stream_read8(&s);
+      v = stream_read32(&s);
+      if (stream_read_bits(v, 32, 0, 3) != 0x07 ||
+          stream_read_bits(v, 32, 16, 4) != 0x0f ||
+          stream_read_bits(v, 32, 20, 2) != 0x00)
+        {
+          stream_destruct(&s);
+          return -1;
+        }
+      pid = stream_read_bits(v, 32, 3, 13);
+      len = stream_read_bits(v, 32, 22, 10);
+      stream_read(&s, NULL, len);
       list_push_back(&psi->pmt.streams, (ts_psi_pmt_stream[]){{.type = type, .pid = pid}}, sizeof (ts_psi_pmt_stream));
     }
 
- return bytes_valid(&b) ? (ssize_t) size : -1;
+  valid = stream_valid(&s);
+  stream_destruct(&s);
+  return valid ? (ssize_t) size : -1;
 }
 
 /* internals */
 
 static ssize_t ts_psi_unpack_pat(ts_psi *psi, void *data, size_t size, int id_extension, int version)
 {
-  bytes b;
+  stream s;
   uint32_t v;
-  int num, pid;
+  int num, pid, valid;
 
-  bytes_construct(&b, data, size);
-  while (bytes_size(&b))
+  stream_construct(&s, data, size);
+  while (stream_size(&s))
     {
       if (psi->pat.present)
         return -1;
-      v = bytes_read4(&b);
-      if (bytes_bits(v, 32, 16, 3) != 0x07)
-        return -1;
-      num = bytes_bits(v, 32, 0, 16);
-      pid = bytes_bits(v, 32, 19, 13);
+      v = stream_read32(&s);
+      if (stream_read_bits(v, 32, 16, 3) != 0x07)
+        {
+          stream_destruct(&s);
+          return -1;
+        }
+      num = stream_read_bits(v, 32, 0, 16);
+      pid = stream_read_bits(v, 32, 19, 13);
 
       psi->pat.present = 1;
       psi->pat.id_extension = id_extension;
@@ -94,9 +109,12 @@ static ssize_t ts_psi_unpack_pat(ts_psi *psi, void *data, size_t size, int id_ex
       psi->pat.program_pid = pid;
     }
 
-  return bytes_valid(&b) ? (ssize_t) size : -1;
+  valid = stream_valid(&s);
+  stream_destruct(&s);
+  return valid ? (ssize_t) size : -1;
 }
 
+/*
 static ssize_t ts_psi_pack_pat(ts_psi *psi, bytes *b)
 {
   uint32_t v;
@@ -108,6 +126,7 @@ static ssize_t ts_psi_pack_pat(ts_psi *psi, bytes *b)
 
   return 4;
 }
+*/
 
 static ssize_t ts_psi_unpack_table_data(ts_psi *psi, void *data, size_t size, int id, int id_extension, int version)
 {
@@ -137,61 +156,62 @@ void ts_psi_destruct(ts_psi *psi)
 
 ssize_t ts_psi_unpack(ts_psi *psi, void *data, size_t size)
 {
-  bytes b;
+  stream s;
   uint32_t v;
   size_t len;
   int id, id_extension, version, current, section, section_last;
   ssize_t n;
 
+  stream_construct(&s, data, size);
+
   // table pointer
-  bytes_construct(&b, data, size);
-  v = bytes_read1(&b);
-  bytes_read(&b, NULL, v);
+  len = stream_read8(&s);
+  stream_read(&s, NULL, len);
 
   // read potentially multiple headers
-  while (bytes_size(&b))
+  while (stream_size(&s))
     {
       // table id
-      id = bytes_read1(&b);
+      id = stream_read8(&s);
       if (id == 0xff)
         return size;
 
       // table header section
-      v = bytes_read2(&b);
-      if (!bytes_valid(&b))
+      v = stream_read16(&s);
+      if (!stream_valid(&s))
         return 0;
-      if (bytes_bits(v, 16, 0, 1) != 0x01 ||
-          bytes_bits(v, 16, 1, 1) != 0x00 ||
-          bytes_bits(v, 16, 2, 2) != 0x03 ||
-          bytes_bits(v, 16, 4, 2) != 0x00)
+      if (stream_read_bits(v, 16, 0, 1) != 0x01 ||
+          stream_read_bits(v, 16, 1, 1) != 0x00 ||
+          stream_read_bits(v, 16, 2, 2) != 0x03 ||
+          stream_read_bits(v, 16, 4, 2) != 0x00)
         return -1;
 
       // calculate table data length
-      len = bytes_bits(v, 16, 6, 10);
-      if (len < 9 || bytes_size(&b) < len)
+      len = stream_read_bits(v, 16, 6, 10);
+      if (len < 9 || stream_size(&s) < len)
         return -1;
       len -= 9;
 
       // table syntax section
-      id_extension = bytes_read2(&b);
-      v = bytes_read1(&b);
-      if (bytes_bits(v, 8, 0, 2) != 0x03)
+      id_extension = stream_read16(&s);
+      v = stream_read8(&s);
+      if (stream_read_bits(v, 8, 0, 2) != 0x03)
         return -1;
-      version = bytes_bits(v, 8, 2, 5);
-      current = bytes_bits(v, 8, 7, 1);
-      section = bytes_read1(&b);
-      section_last = bytes_read1(&b);
+      version = stream_read_bits(v, 8, 2, 5);
+      current = stream_read_bits(v, 8, 7, 1);
+      section = stream_read8(&s);
+      section_last = stream_read8(&s);
 
       // unpack table data if current
       if (current)
         {
-          n = ts_psi_unpack_table_data(psi, bytes_data(&b), len, id, id_extension, version);
+          n = ts_psi_unpack_table_data(psi, stream_data(&s), len, id, id_extension, version);
           if (n == -1)
             return -1;
         }
-      bytes_read(&b, NULL, len);
-      bytes_read(&b, NULL, 4);
-      if (!bytes_valid(&b))
+      stream_read(&s, NULL, len);
+      stream_read(&s, NULL, 4);
+      if (!stream_valid(&s))
         return -1;
 
       if (section == section_last)
@@ -201,6 +221,13 @@ ssize_t ts_psi_unpack(ts_psi *psi, void *data, size_t size)
   return 0;
 }
 
+void ts_psi_debug(ts_psi *psi, FILE *f, int indent)
+{
+  ts_psi_pat_debug(&psi->pat, f, indent);
+  ts_psi_pmt_debug(&psi->pmt, f, indent);
+}
+
+/*
 ssize_t ts_psi_pack(ts_psi *psi, void **data, size_t *size, int content_type)
 {
   buffer buffer, content;
@@ -233,13 +260,5 @@ ssize_t ts_psi_pack(ts_psi *psi, void **data, size_t *size, int content_type)
   buffer_debug(stderr, c.buffer);
 
   return -1;
-  /*
-  switch (content_type)
-    {
-    case 0x00:
-      return ts_psi_pack_pat(psi, data, size);
-    default:
-      return -1;
-    }
-  */
 }
+*/

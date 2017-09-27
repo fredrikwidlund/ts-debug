@@ -20,7 +20,7 @@ static uint64_t stream_read48(stream *stream)
 static ssize_t ts_adaptation_field_unpack(ts_adaptation_field *af, void *data, size_t size)
 {
   stream s;
-  int len;
+  int len, valid;
   uint8_t flags;
   uint64_t v;
 
@@ -45,8 +45,9 @@ static ssize_t ts_adaptation_field_unpack(ts_adaptation_field *af, void *data, s
         }
     }
 
+  valid = stream_valid(&s);
   stream_destruct(&s);
-  return len + 1;
+  return valid ? len + 1 : -1;
 }
 
 /*
@@ -96,6 +97,23 @@ void ts_packet_destruct(ts_packet *packet)
   ts_packet_construct(packet);
 }
 
+ts_packet *ts_packet_new(void)
+{
+  ts_packet *packet;
+
+  packet = malloc(sizeof *packet);
+  if (!packet)
+    abort();
+  ts_packet_construct(packet);
+  return packet;
+}
+
+void ts_packet_delete(ts_packet *packet)
+{
+  ts_packet_destruct(packet);
+  free(packet);
+}
+
 ssize_t ts_packet_unpack(ts_packet *packet, void *data, size_t size)
 {
   stream s;
@@ -139,10 +157,4 @@ ssize_t ts_packet_unpack(ts_packet *packet, void *data, size_t size)
   valid = stream_valid(&s);
   stream_destruct(&s);
   return valid ? 188 : -1;
-}
-
-void ts_packet_delete(ts_packet *packet)
-{
-  ts_packet_destruct(packet);
-  free(packet);
 }

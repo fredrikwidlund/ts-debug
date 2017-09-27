@@ -8,8 +8,8 @@
 
 #include <dynamic.h>
 
-#include "bytes.h"
 #include "ts_packet.h"
+#include "ts_packets.h"
 #include "ts_psi.h"
 #include "ts_pes.h"
 #include "ts_stream.h"
@@ -70,7 +70,7 @@ int ts_unit_guess_type(ts_unit *unit)
 
 int ts_unit_write(ts_unit *unit, ts_packet *packet)
 {
-  buffer_insert(&unit->data, buffer_size(&unit->data), packet->payload_data, packet->payload_size);
+  buffer_insert(&unit->data, buffer_size(&unit->data), packet->data, packet->size);
   ts_packet_delete(packet);
 
   return 0;
@@ -261,7 +261,7 @@ int ts_stream_write(ts_stream *stream, ts_packet *packet)
   return ts_stream_process(stream, unit);
 }
 
-int ts_stream_pack(ts_stream *stream, ts_packets *packets)
+ssize_t ts_stream_pack(ts_stream *stream, ts_packets *packets)
 {
   void *data;
   size_t size;
@@ -277,6 +277,8 @@ int ts_stream_pack(ts_stream *stream, ts_packets *packets)
       printf("got %ld\n", n);
       break;
     }
+
+  return -1;
 }
 
 void ts_stream_debug(ts_stream *stream, FILE *f, int indent)

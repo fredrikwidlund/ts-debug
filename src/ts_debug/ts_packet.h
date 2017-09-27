@@ -33,8 +33,10 @@ struct ts_packet
   size_t               size;
 };
 
-void    ts_packet_construct(ts_packet *);
-void    ts_packet_destruct(ts_packet *);
-ssize_t ts_packet_unpack(ts_packet *, void *, size_t);
+void       ts_packet_construct(ts_packet *);
+void       ts_packet_destruct(ts_packet *);
+ts_packet *ts_packet_new(void);
+void       ts_packet_delete(ts_packet *);
+ssize_t    ts_packet_unpack(ts_packet *, void *, size_t);
 
 #endif /* TS_PACKET_H_INCLUDED */

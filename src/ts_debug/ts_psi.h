@@ -40,5 +40,6 @@ void    ts_psi_construct(ts_psi *);
 void    ts_psi_destruct(ts_psi *);
 ssize_t ts_psi_unpack(ts_psi *, void *, size_t);
 ssize_t ts_psi_pack(ts_psi *, void **, size_t *, int);
+void    ts_psi_debug(ts_psi *, FILE *, int);
 
 #endif /* TS_PSI_H_INCLUDED */

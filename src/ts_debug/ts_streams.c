@@ -8,8 +8,8 @@
 
 #include <dynamic.h>
 
-#include "bytes.h"
 #include "ts_packet.h"
+#include "ts_packets.h"
 #include "ts_psi.h"
 #include "ts_pes.h"
 #include "ts_stream.h"
@@ -116,6 +116,8 @@ void ts_streams_debug(ts_streams *streams, FILE *f, int indent)
 {
   ts_stream **i;
   int n;
+
+  ts_psi_debug(&streams->psi, f, indent);
 
   n = 0;
   list_foreach(&streams->streams, i)
