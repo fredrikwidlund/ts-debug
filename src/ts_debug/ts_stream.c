@@ -24,6 +24,13 @@ void ts_unit_destruct(ts_unit *unit)
   buffer_destruct(&unit->data);
 }
 
+void ts_unit_construct(ts_unit *unit)
+{
+  unit->complete = 0;
+  ts_pes_construct(&unit->pes);
+  buffer_construct(&unit->data);
+}
+
 ts_unit *ts_unit_new(void)
 {
   ts_unit *unit;
@@ -31,10 +38,7 @@ ts_unit *ts_unit_new(void)
   unit = malloc(sizeof *unit);
   if (!unit)
     abort();
-  unit->complete = 0;
-  ts_pes_construct(&unit->pes);
-  buffer_construct(&unit->data);
-
+  ts_unit_construct(unit);
   return unit;
 }
 
@@ -53,11 +57,64 @@ int ts_unit_guess_type(ts_unit *unit)
   return TS_STREAM_TYPE_UNKNOWN;
 }
 
+void ts_unit_write(ts_unit *unit, void *data, size_t size)
+{
+  buffer_insert(&unit->data, buffer_size(&unit->data), data, size);
+}
+
 ssize_t ts_unit_unpack(ts_unit *unit, ts_packet *packet)
 {
-  buffer_insert(&unit->data, buffer_size(&unit->data), packet->data, packet->size);
+  ts_unit_write(unit, packet->data, packet->size);
+  return packet->size;
+}
 
-  return 1;
+ssize_t ts_unit_pack(ts_unit *unit, ts_packets *packets, int pid, size_t cc)
+{
+  ts_packet *packet;
+  uint8_t *data;
+  size_t size;
+  ssize_t n;
+
+  data = buffer_data(&unit->data);
+  size = buffer_size(&unit->data);
+
+  n = 0;
+  while (size)
+    {
+      packet = malloc(sizeof *packet);
+      if (!packet)
+        abort();
+      ts_packet_construct(packet);
+      packet->size = 188;
+      packet->pid = pid;
+      packet->adaptation_field_control = 0x01;
+      packet->continuity_counter = cc + n;
+      packet->size -= 4;
+
+      if (n == 0)
+        {
+          packet->payload_unit_start_indicator = 1;
+          packet->adaptation_field_control |= 0x02;
+          packet->adaptation_field.random_access_indicator = 1;
+          packet->size -= 2;
+        }
+
+      if (size < packet->size)
+        packet->size = size;
+
+      packet->data = malloc(packet->size);
+      if (!packet->data)
+        abort();
+      memcpy(packet->data, data, packet->size);
+
+      data += packet->size;
+      size -= packet->size;
+
+      list_push_back(&packets->list, &packet, sizeof packet);
+      n ++;
+    }
+
+  return n;
 }
 
 void ts_unit_debug(ts_unit *unit, FILE *f, int indent)
@@ -217,20 +274,36 @@ ssize_t ts_stream_pack(ts_stream *stream, ts_packets *packets)
 {
   void *data;
   size_t size;
-  ssize_t n;
+  ssize_t n, cc;
+  ts_unit *unit, **i;
 
   switch (stream->type)
     {
     case TS_STREAM_TYPE_PSI:
+      // unit data save to buffer
+      list_clear(&stream->units, ts_stream_units_release);
       n = ts_psi_pack(&stream->streams->psi, &data, &size, stream->content_type);
       if (n == -1)
         return -1;
-      (void) packets;
-      printf("got %ld\n", n);
-      break;
-    }
 
-  return -1;
+      unit = ts_unit_new();
+      ts_unit_write(unit, data, size);
+      free(data);
+      list_push_back(&stream->units, &unit, sizeof unit);
+
+      // pack buffer
+      cc = 0;
+      list_foreach(&stream->units, i)
+        {
+          n = ts_unit_pack(*i, packets, stream->pid, cc);
+          if (n == -1)
+            return -1;
+          cc += n;
+        }
+      return cc;
+    default:
+      return 0;
+    }
 }
 
 void ts_stream_debug(ts_stream *stream, FILE *f, int indent)

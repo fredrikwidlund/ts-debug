@@ -4,8 +4,8 @@
 typedef struct ts_packets ts_packets;
 struct ts_packets
 {
-  buffer in;
   list   list;
+  buffer in;
 };
 
 void      ts_packets_construct(ts_packets *);

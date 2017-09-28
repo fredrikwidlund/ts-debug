@@ -115,19 +115,27 @@ static ssize_t ts_psi_pat_unpack(ts_psi_pat *pat, void *data, size_t size, int i
   return valid ? (ssize_t) size : -1;
 }
 
-/*
-static ssize_t ts_psi_pack_pat(ts_psi *psi, bytes *b)
+static ssize_t ts_psi_pat_pack(ts_psi_pat *pat, void **data, size_t *size)
 {
-  uint32_t v;
+  buffer b;
+  stream s;
 
-  v = bytes_write_bits(psi->pat.program_number, 32, 0, 16);
-  v |= bytes_write_bits(0x07, 32, 16, 3);
-  v |= bytes_write_bits(psi->pat.program_pid, 32, 19, 13);
-  bytes_write32(b, v);
+  if (!pat->present)
+    return -1;
 
-  return 4;
+  buffer_construct(&b);
+  stream_construct_buffer(&s, &b);
+  stream_write32(&s,
+                 stream_write_bits(pat->program_number, 32, 0, 16) |
+                 stream_write_bits(0x07, 32, 16, 3) |
+                 stream_write_bits(pat->program_pid, 32, 19, 13));
+  stream_destruct(&s);
+  buffer_compact(&b);
+
+  *data = buffer_data(&b);
+  *size = buffer_size(&b);
+  return *size;
 }
-*/
 
 static ssize_t ts_psi_unpack_table_data(ts_psi *psi, void *data, size_t size, int id, int id_extension, int version)
 {
@@ -222,44 +230,73 @@ ssize_t ts_psi_unpack(ts_psi *psi, void *data, size_t size)
   return 0;
 }
 
+ssize_t ts_psi_pack(ts_psi *psi, void **data, size_t *size, int id)
+{
+  buffer b;
+  stream s;
+  ssize_t n;
+  void *content_data;
+  size_t content_size;
+
+  content_data = NULL;
+  switch (id)
+    {
+    case 0x00:
+      n = ts_psi_pat_pack(&psi->pat, &content_data, &content_size);
+      break;
+    default:
+      *data = NULL;
+      *size = 0;
+      return 0;
+    }
+
+  if (n <= 0 || n > (1021 - 9))
+    {
+      free(content_data);
+      return -1;
+    }
+
+  buffer_construct(&b);
+  stream_construct_buffer(&s, &b);
+
+  // table pointer
+  stream_write8(&s, 0);
+
+  // header
+  stream_write8(&s, id);
+  stream_write16(&s,
+                 stream_write_bits(1, 16, 0, 1) |
+                 stream_write_bits(1, 16, 1, 2) |
+                 stream_write_bits(3, 16, 2, 2) |
+                 stream_write_bits(0, 16, 4, 2) |
+                 stream_write_bits(content_size, 16, 6, 10));
+
+  // header syntax
+  stream_write16(&s, 1);
+  stream_write8(&s,
+                stream_write_bits(3, 8, 0, 2) |
+                stream_write_bits(1, 8, 2, 5) |
+                stream_write_bits(1, 8, 7, 1));
+  stream_write8(&s, 0);
+  stream_write8(&s, 0);
+
+  // table data
+  stream_write(&s, content_data, content_size);
+  stream_write32(&s, 0);
+  free(content_data);
+
+  // header end
+  stream_write8(&s, 0xff);
+  stream_destruct(&s);
+
+  buffer_compact(&b);
+  *data = buffer_data(&b);
+  *size = buffer_size(&b);
+  return *size;
+}
+
 void ts_psi_debug(ts_psi *psi, FILE *f, int indent)
 {
   ts_psi_pat_debug(&psi->pat, f, indent);
   ts_psi_pmt_debug(&psi->pmt, f, indent);
 }
-
-/*
-ssize_t ts_psi_pack(ts_psi *psi, void **data, size_t *size, int content_type)
-{
-  buffer buffer, content;
-  uint64_t v;
-  bytes b, c;
-
-  switch (content_type)
-    {
-    case 0x00:
-      buffer_construct(&content);
-      bytes_construct_buffer(&c, &content);
-      ts_psi_pack_pat(psi, &c);
-      break;
-    }
-
-  buffer_construct(&buffer);
-  bytes_construct_buffer(&b, &buffer);
-  bytes_write8(&b, 0);
-  bytes_write8(&b, 0);
-
-  v =
-    bytes_write_bits(1, 16, 0, 1) |
-    bytes_write_bits(1, 16, 1, 1) |
-    bytes_write_bits(3, 16, 2, 2) |
-    bytes_write_bits(0, 16, 4, 2) |
-    bytes_write_bits(bytes_size(&c), 16, 6, 10);
-  bytes_write16(&b, v);
-
-  buffer_debug(stderr, b.buffer);
-  buffer_debug(stderr, c.buffer);
-
-  return -1;
-}
-*/

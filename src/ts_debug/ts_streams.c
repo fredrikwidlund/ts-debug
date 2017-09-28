@@ -121,10 +121,19 @@ ssize_t ts_streams_unpack(ts_streams *streams, ts_packets *packets)
 
 ssize_t ts_streams_pack(ts_streams *streams, ts_packets *packets)
 {
-  ts_stream *stream;
+  ts_stream **i;
+  ssize_t n, n_tot;
 
-  stream = ts_streams_lookup(streams, 0);
-  return ts_stream_pack(stream, packets);
+  n_tot = 0;
+  list_foreach(&streams->list, i)
+    {
+      n = ts_stream_pack(*i, packets);
+      if (n == -1)
+        return -1;
+      n_tot += n;
+    }
+
+  return n_tot;
 }
 
 void ts_streams_debug(ts_streams *streams, FILE *f, int indent)
@@ -151,7 +160,7 @@ int ts_streams_psi(ts_streams *streams, ts_psi *psi)
   if (psi->pat.present && !streams->psi.pat.present)
     {
       streams->psi.pat = psi->pat;
-      e = ts_streams_type(streams, streams->psi.pat.program_pid, TS_STREAM_TYPE_PSI, 0);
+      e = ts_streams_type(streams, streams->psi.pat.program_pid, TS_STREAM_TYPE_PSI, 0x02);
       if (e == -1)
         return -1;
     }
