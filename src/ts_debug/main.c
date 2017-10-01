@@ -48,10 +48,10 @@ int main()
   ts_packets_destruct(&packets);
 
   // mux streams
-  //ts_streams_debug(&streams, stdout, 0);
+  ts_streams_debug(&streams, stdout, 0);
+
   ts_packets_construct(&packets);
   n = ts_streams_pack(&streams, &packets);
-  printf("n %ld\n", n);
   ts_streams_destruct(&streams);
   
 

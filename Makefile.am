@@ -8,9 +8,15 @@ README.rst
 bin_PROGRAMS = bin/ts_debug bin/resync
 
 RESYNC_SOURCE_FILES = \
+src/resync/ts_adaptation_field.c \
+src/resync/ts_packet.c \
+src/resync/ts_packets.c \
 src/resync/main.c
 
-RESYNC_HEADER_FILES =
+RESYNC_HEADER_FILES = \
+src/resync/ts_adaptation_field.h \
+src/resync/ts_packet.h \
+src/resync/ts_packets.h
 
 TS_DEBUG_SOURCE_FILES = \
 src/ts_debug/ts_packet.c \
