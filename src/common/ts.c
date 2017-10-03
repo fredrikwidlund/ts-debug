@@ -8,7 +8,7 @@
 #include "ts_packet.h"
 #include "ts_packets.h"
 #include "ts_stream.h"
-#include "ts_psi.h"
+#include "ts_pat.h"
 #include "ts.h"
 
 static void ts_streams_release(void *object)
@@ -19,49 +19,50 @@ static void ts_streams_release(void *object)
   free(s);
 }
 
-static ssize_t ts_update_psi(ts *ts, ts_psi *psi)
+static ssize_t ts_update_pat(ts *ts, ts_pat *pat)
 {
+  fprintf(stderr, "update pat\n");
   (void) ts;
-  (void) psi;
+  (void) pat;
   return 0;
 }
 
-static ssize_t ts_process_psi(ts *ts, ts_stream *stream)
-{
-  ts_unit **i;
-  ts_psi psi;
-  ssize_t n;
-
-  list_foreach(ts_stream_units(stream), i)
-    {
-      ts_psi_construct(&psi);
-      n = ts_psi_unpack_buffer(&psi, &(*i)->data);
-      if (n <= 0)
-        {
-          ts_psi_destruct(&psi);
-          return n;
-        }
-      n = ts_update_psi(ts, &psi);
-      ts_psi_destruct(&psi);
-      if (n == -1)
-        return n;
-    }
-
-  return 0;
-}
-
-static int ts_process(ts *ts)
+static ssize_t ts_process_pat(ts *ts)
 {
   ts_stream **i;
-  int e;
-  list_foreach(ts_streams(ts), i)
-    if ((*i)->type == TS_STREAM_TYPE_PSI)
-      {
-        e = ts_process_psi(ts, *i);
-        if (e == -1)
-          return -1;
-      }
+  ts_unit **j;
+  ts_pat pat;
+  ssize_t n;
 
+  list_foreach(ts_streams(ts), i)
+    if ((*i)->type == TS_STREAM_TYPE_PSI && ((*i)->id == 0x00))
+      while (!list_empty(ts_stream_units(*i)))
+        {
+          j = list_front(ts_stream_units(*i));
+          ts_pat_construct(&pat);
+          n = ts_pat_unpack_buffer(&pat, &(*j)->data);
+          if (n <= 0)
+            {
+              ts_pat_destruct(&pat);
+              return n;
+            }
+          n = ts_update_pat(ts, &pat);
+          ts_pat_destruct(&pat);
+          if (n == -1)
+            return -1;
+          (void) ts_stream_read_unit(*i);
+        }
+
+  return 0;
+}
+
+static ssize_t ts_process(ts *ts)
+{
+  ssize_t n;
+
+  n = ts_process_pat(ts);
+  if (n == -1)
+    return -1;
   return 0;
 }
 
@@ -95,7 +96,7 @@ ts_stream *ts_create(ts *ts, int pid)
   ts_stream_construct(s, pid);
 
   if (pid == 0)
-    ts_stream_type(s, TS_STREAM_TYPE_PSI);
+    ts_stream_type(s, TS_STREAM_TYPE_PSI, 0x00);
 
   list_foreach(ts_streams(ts), i)
   if (pid < (*i)->pid)
@@ -197,6 +198,11 @@ void ts_debug(ts *ts)
         units ++;
       (void) fprintf(stderr, "pid %d, %lu units, data ", (*i)->pid, units);
 
+      if (list_empty(ts_stream_units(*i)))
+        {
+          (void) fprintf(stderr, "<none>\n");
+          continue;
+        }
       u = list_front(&(*i)->units);
       data = buffer_data(&(*u)->data);
       size = buffer_size(&(*u)->data);
@@ -205,6 +211,6 @@ void ts_debug(ts *ts)
       sum = 0;
       for (j = 0; j < size; j ++)
         sum += data[j];
-      (void) fprintf(stderr, "  sum %08x\n", sum);
+      (void) fprintf(stderr, "..., sum %08x\n", sum);
     }
 }

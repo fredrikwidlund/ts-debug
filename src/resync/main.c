@@ -11,16 +11,11 @@
 #include "ts_packet.h"
 #include "ts_packets.h"
 
-void packets_release(void *object)
-{
-  ts_packet_destruct(*(ts_packet **) object);
-}
-
 int main()
 {
   buffer buffer;
   stream stream;
-  list packets;
+  ts_packets packets;
   char data[1048476], *p;
   ssize_t n, size;
   ts_packet **i;
@@ -38,7 +33,7 @@ int main()
     }
 
   // unpack packets
-  list_construct(&packets);
+  ts_packets_construct(&packets);
   stream_construct_buffer(&stream, &buffer);
   n = ts_packets_unpack(&packets, &stream);
   if (n == -1)
@@ -47,7 +42,7 @@ int main()
   buffer_destruct(&buffer);
 
   // do something with the packets
-  list_foreach(&packets, i)
+  list_foreach(ts_packets_list(&packets), i)
     (*i)->adaptation_field.pcr_flag = 0;
 
   // pack packets
@@ -56,7 +51,7 @@ int main()
   n = ts_packets_pack(&packets, &stream);
   if (n == -1)
     err(1, "ts_packets_pack");
-  list_destruct(&packets, packets_release);
+  ts_packets_destruct(&packets);
   stream_destruct(&stream);
 
   // write output

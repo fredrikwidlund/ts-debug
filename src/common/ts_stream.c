@@ -44,14 +44,28 @@ void ts_stream_destruct(ts_stream *s)
   list_destruct(&s->units, ts_stream_units_release);
 }
 
-void ts_stream_type(ts_stream *s, int type)
+void ts_stream_type(ts_stream *s, int type, uint8_t id)
 {
   s->type = type;
+  s->id = id;
 }
 
 list *ts_stream_units(ts_stream *s)
 {
   return &s->units;
+}
+
+ts_unit *ts_stream_read_unit(ts_stream *s)
+{
+  ts_unit *unit, **i;
+
+  if (list_empty(ts_stream_units(s)))
+    return NULL;
+  i = list_front(ts_stream_units(s));
+  unit = *i;
+  list_erase(i, ts_stream_units_release);
+
+  return unit;
 }
 
 ssize_t ts_stream_pack(ts_stream *s, ts_packets *packets)
