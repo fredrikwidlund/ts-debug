@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 
@@ -32,19 +33,13 @@ size_t ts_packet_size(ts_packet *packet)
 
 ssize_t ts_packet_pack(ts_packet *packet, stream *stream)
 {
-  ssize_t n, stuffing = 0;
+  ssize_t n;
 
   if (!packet->payload_size)
     packet->adaptation_field_control &= ~0x01;
 
   if (ts_packet_size(packet) < 188)
-    {
-      packet->adaptation_field_control |= 0x02;
-      stuffing = 188 - ts_packet_size(packet);
-    }
-
-  if (ts_packet_size(packet) + stuffing > 188)
-      return -1;
+    packet->adaptation_field_control |= 0x02;
 
   stream_write32(stream,
                  stream_write_bits(0x47, 32, 0, 8) |
@@ -58,7 +53,7 @@ ssize_t ts_packet_pack(ts_packet *packet, stream *stream)
 
   if (packet->adaptation_field_control & 0x02)
     {
-      n = ts_adaptation_field_pack(&packet->adaptation_field, stream, stuffing);
+      n = ts_adaptation_field_pack(&packet->adaptation_field, stream, 188 - 4 - packet->payload_size);
       if (n == -1)
         return -1;
     }

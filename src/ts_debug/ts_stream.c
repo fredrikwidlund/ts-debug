@@ -119,10 +119,20 @@ ssize_t ts_unit_pack(ts_unit *unit, ts_packets *packets, int pid, size_t cc)
 
 void ts_unit_debug(ts_unit *unit, FILE *f, int indent)
 {
+  size_t i, size;
+  uint8_t *data;
+
   if (unit->unpacked)
     ts_pes_debug(&unit->pes, f, indent);
   else
-    (void) fprintf(f, "%*s[size %lu, complete %u]\n", indent * 2, "", buffer_size(&unit->data), unit->complete);
+    {
+      (void) fprintf(f, "%*s[size %lu, complete %u] ", indent * 2, "", buffer_size(&unit->data), unit->complete);
+      data = buffer_data(&unit->data);
+      size = buffer_size(&unit->data);
+      for (i = 0; i < 16 && i < size; i ++)
+        (void) fprintf(f, "%02x", data[i]);
+      (void) fprintf(f, "]\n");
+    }
 }
 
 /* ts_stream */

@@ -53,7 +53,6 @@ int main()
   ts_packets_construct(&packets);
   n = ts_streams_pack(&streams, &packets);
   ts_streams_destruct(&streams);
-  
 
   ts_packets_destruct(&packets);
 

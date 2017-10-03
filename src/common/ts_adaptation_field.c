@@ -46,9 +46,12 @@ size_t ts_adaptation_field_size(ts_adaptation_field *af)
     (af->transport_private_data_flag ? af->private_size + 1 : 0);
 }
 
-ssize_t ts_adaptation_field_pack(ts_adaptation_field *af, stream *stream, size_t stuffing)
+ssize_t ts_adaptation_field_pack(ts_adaptation_field *af, stream *stream, size_t size)
 {
-  stream_write8(stream, ts_adaptation_field_size(af) - 1 + stuffing);
+  stream_write8(stream, size - 1);
+  if (size == 1)
+    return stream_valid(stream) ? 1 : -1;
+
   stream_write8(stream,
                 stream_write_bits(af->discontinuity_indicator, 8, 0, 1) |
                 stream_write_bits(af->random_access_indicator, 8, 1, 1) |
@@ -74,10 +77,11 @@ ssize_t ts_adaptation_field_pack(ts_adaptation_field *af, stream *stream, size_t
       stream_write(stream, af->private_data, af->private_size);
     }
 
-  while (stuffing)
+  size -= ts_adaptation_field_size(af);
+  while (size)
     {
       stream_write8(stream, 0xff);
-      stuffing --;
+      size --;
     }
 
   return stream_valid(stream) ? 1 : -1;
