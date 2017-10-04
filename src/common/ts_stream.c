@@ -7,6 +7,7 @@
 #include <dynamic.h>
 
 #include "ts_adaptation_field.h"
+#include "ts_pes.h"
 #include "ts_packet.h"
 #include "ts_packets.h"
 #include "ts_stream.h"
@@ -16,6 +17,13 @@ static void ts_stream_units_release(void *object)
   ts_unit *unit = *(ts_unit **) object;
   ts_unit_destruct(unit);
   free(unit);
+}
+
+static void ts_stream_pes_release(void *object)
+{
+  ts_pes *pes = *(ts_pes **) object;
+  ts_pes_destruct(pes);
+  free(pes);
 }
 
 void ts_unit_construct(ts_unit *unit)
@@ -37,11 +45,13 @@ void ts_stream_construct(ts_stream *s, int pid)
 {
   *s = (ts_stream) {.pid = pid};
   list_construct(&s->units);
+  list_construct(&s->pes);
 }
 
 void ts_stream_destruct(ts_stream *s)
 {
   list_destruct(&s->units, ts_stream_units_release);
+  list_destruct(&s->pes, ts_stream_pes_release);
 }
 
 void ts_stream_type(ts_stream *s, int type, uint8_t id)
@@ -55,6 +65,11 @@ list *ts_stream_units(ts_stream *s)
   return &s->units;
 }
 
+list *ts_stream_pes(ts_stream *s)
+{
+  return &s->pes;
+}
+
 ts_unit *ts_stream_read_unit(ts_stream *s)
 {
   ts_unit *unit, **i;
@@ -66,6 +81,11 @@ ts_unit *ts_stream_read_unit(ts_stream *s)
   list_erase(i, ts_stream_units_release);
 
   return unit;
+}
+
+void ts_stream_write_pes(ts_stream *s, ts_pes *pes)
+{
+  list_push_back(ts_stream_pes(s), &pes, sizeof pes);
 }
 
 ssize_t ts_stream_pack(ts_stream *s, ts_packets *packets)

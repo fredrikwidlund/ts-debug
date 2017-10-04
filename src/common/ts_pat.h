@@ -12,8 +12,10 @@ struct ts_pat
 };
 
 void    ts_pat_construct(ts_pat *);
+ssize_t ts_pat_construct_buffer(ts_pat *, buffer *);
 void    ts_pat_destruct(ts_pat *);
 ssize_t ts_pat_unpack_stream(ts_pat *, stream *);
 ssize_t ts_pat_unpack_buffer(ts_pat *, buffer *);
+void    ts_pat_debug(ts_pat *, FILE *);
 
 #endif /* TS_PAT_H_INCLUDED */

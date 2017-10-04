@@ -11,6 +11,8 @@ LOAD_SOURCE_FILES = \
 src/common/ts_adaptation_field.c \
 src/common/ts_psi.c \
 src/common/ts_pat.c \
+src/common/ts_pmt.c \
+src/common/ts_pes.c \
 src/common/ts_packet.c \
 src/common/ts_packets.c \
 src/common/ts_stream.c \
@@ -21,6 +23,8 @@ LOAD_HEADER_FILES = \
 src/common/ts_adaptation_field.h \
 src/common/ts_psi.h \
 src/common/ts_pat.h \
+src/common/ts_pmt.h \
+src/common/ts_pes.h \
 src/common/ts_packet.h \
 src/common/ts_packets.h \
 src/common/ts_stream.h \

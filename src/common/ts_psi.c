@@ -13,6 +13,17 @@ void ts_psi_construct(ts_psi *psi)
   *psi = (ts_psi) {0};
 }
 
+ssize_t ts_psi_construct_stream(ts_psi *psi, stream *stream)
+{
+  ssize_t n;
+
+  ts_psi_construct(psi);
+  n = ts_psi_unpack_stream(psi, stream);
+  if (n <= 0)
+    ts_psi_destruct(psi);
+  return n;
+}
+
 void ts_psi_destruct(ts_psi *psi)
 {
   *psi = (ts_psi) {0};

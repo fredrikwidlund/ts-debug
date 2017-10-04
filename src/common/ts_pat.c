@@ -12,87 +12,49 @@ void ts_pat_construct(ts_pat *pat)
   *pat = (ts_pat) {0};
 }
 
+ssize_t ts_pat_construct_buffer(ts_pat *pat, buffer *buffer)
+{
+  ssize_t n;
+
+  ts_pat_construct(pat);
+  n = ts_pat_unpack_buffer(pat, buffer);
+  if (n <= 0)
+    ts_pat_destruct(pat);
+  return n;
+}
+
 void ts_pat_destruct(ts_pat *pat)
 {
   *pat = (ts_pat) {0};
 }
 
-/*
- while (stream_size(&s))
-    {
-      if (pat->present)
-        return -1;
-      v = stream_read32(&s);
-      if (stream_read_bits(v, 32, 16, 3) != 0x07)
-        {
-          stream_destruct(&s);
-          return -1;
-        }
-      num = stream_read_bits(v, 32, 0, 16);
-      pid = stream_read_bits(v, 32, 19, 13);
-
-      pat->present = 1;
-      pat->id_extension = id_extension;
-      pat->version = version;
-      pat->program_number = num;
-      pat->program_pid = pid;
-    }
-*/
-
-ssize_t ts_pat_unpack_stream(ts_pat *pat, stream *data)
+ssize_t ts_pat_unpack_stream(ts_pat *pat, stream *stream)
 {
   ts_psi psi;
   ssize_t n;
-  stream table;
   int v;
 
-  n = ts_psi_pointer_unpack(data);
+  n = ts_psi_pointer_unpack(stream);
   if (n <= 0)
     return n;
 
-  ts_psi_construct(&psi);
-  n = ts_psi_unpack_stream(&psi, data);
+  n = ts_psi_construct_stream(&psi, stream);
   if (n <= 0)
-    {
-      ts_psi_destruct(&psi);
-      return n;
-    }
-
-  if (stream_size(data) < (size_t) (psi.section_length - 5))
-    {
-      ts_psi_destruct(&psi);
-      return -1;
-    }
-
-  stream_construct(&table, stream_data(data), psi.section_length - 9);
-  while (stream_size(&table))
-    {
-      v = stream_read32(&table);
-      if (stream_read_bits(v, 32, 16, 3) != 0x07)
-        {
-          stream_destruct(&table);
-          ts_psi_destruct(&psi);
-          return -1;
-        }
-      pat->id = psi.id;
-      pat->id_extension = psi.id_extension;
-      pat->version = psi.version;
-      pat->program_number = stream_read_bits(v, 32, 0, 16);
-      pat->program_pid = stream_read_bits(v, 32, 19, 13);
-      fprintf(stderr, "%u %u\n", pat->program_number, pat->program_pid);
-    }
-
-  stream_read(data, NULL, psi.section_length - 9);
-  // checksum
-  (void) stream_read32(data);
-
-  fprintf(stderr, "%lu\n", stream_size(data));
-  fprintf(stderr, "%02x\n", stream_read8(data));
-
-  stream_destruct(&table);
+    return n;
+  pat->id = psi.id;
+  pat->id_extension = psi.id_extension;
+  pat->version = psi.version;
   ts_psi_destruct(&psi);
+  v = stream_read32(stream);
+  if (stream_read_bits(v, 32, 16, 3) != 0x07)
+    return -1;
+  pat->program_number = stream_read_bits(v, 32, 0, 16);
+  pat->program_pid = stream_read_bits(v, 32, 19, 13);
 
-  return stream_valid(data) ? 1 : -1;
+  if (pat->id != 0x00)
+    return -1;
+
+  return stream_valid(stream) ? 1 : -1;
 }
 
 ssize_t ts_pat_unpack_buffer(ts_pat *pat, buffer *buffer)
@@ -107,3 +69,8 @@ ssize_t ts_pat_unpack_buffer(ts_pat *pat, buffer *buffer)
   return n;
 }
 
+void ts_pat_debug(ts_pat *pat, FILE *f)
+{
+  (void) fprintf(f, "[pat] id 0x%02x, id extension 0x%02x, version %d, program number %d, program pid %d\n",
+                 pat->id, pat->id_extension, pat->version, pat->program_number, pat->program_pid);
+}

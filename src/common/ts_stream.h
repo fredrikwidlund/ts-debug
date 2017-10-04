@@ -22,6 +22,7 @@ struct ts_stream
   int       type;
   uint8_t   id;
   list      units;
+  list      pes;
 };
 
 void     ts_unit_construct(ts_unit *);
@@ -32,7 +33,9 @@ void     ts_stream_construct(ts_stream *, int);
 void     ts_stream_destruct(ts_stream *);
 void     ts_stream_type(ts_stream *, int, uint8_t);
 list    *ts_stream_units(ts_stream *);
+list    *ts_stream_pes(ts_stream *);
 ts_unit *ts_stream_read_unit(ts_stream *);
+void     ts_stream_write_pes(ts_stream *, ts_pes *);
 ssize_t  ts_stream_unpack(ts_stream *, ts_packet *);
 ssize_t  ts_stream_pack(ts_stream *, ts_packets *);
 

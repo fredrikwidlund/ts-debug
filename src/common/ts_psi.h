@@ -14,6 +14,7 @@ struct ts_psi
 };
 
 void    ts_psi_construct(ts_psi *);
+ssize_t ts_psi_construct_stream(ts_psi *, stream *);
 void    ts_psi_destruct(ts_psi *);
 ssize_t ts_psi_unpack_stream(ts_psi *, stream *);
 ssize_t ts_psi_pointer_unpack(stream *);

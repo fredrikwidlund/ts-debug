@@ -8,12 +8,13 @@
 #include <dynamic.h>
 
 #include "ts_adaptation_field.h"
+#include "ts_pes.h"
 #include "ts_packet.h"
 #include "ts_packets.h"
 #include "ts_stream.h"
 #include "ts.h"
 
-int load(buffer *buffer, char *path)
+ssize_t buffer_construct_file(buffer *buffer, char *path)
 {
   int fd;
   char block[1048576];
@@ -23,6 +24,7 @@ int load(buffer *buffer, char *path)
   if (fd == -1)
     return -1;
 
+  buffer_construct(buffer);
   while (1)
     {
       n = read(fd, block, sizeof block);
@@ -36,7 +38,7 @@ int load(buffer *buffer, char *path)
   return n;
 }
 
-int save(buffer *buffer, char *path)
+ssize_t buffer_save(buffer *buffer, char *path)
 {
   int fd;
   char *data;
@@ -71,36 +73,33 @@ static void resync(ts *ts)
 
 int main(int argc, char **argv)
 {
-  buffer buffer;
-  stream stream;
   ts ts;
-  int e;
+  buffer buffer;
+  ssize_t n;
 
   if (argc != 3)
     errx(1, "invalid parameters\n");
 
-  buffer_construct(&buffer);
-  e = load(&buffer, argv[1]);
-  if (e == -1)
-    err(1, "load %s\n", argv[1]);
-  stream_construct_buffer(&stream, &buffer);
+  n = buffer_construct_file(&buffer, argv[1]);
+  if (n == -1)
+    err(1, "buffer_construct_file %s\n", argv[1]);
 
   ts_construct(&ts);
-  ts_unpack(&ts, &stream);
-  stream_destruct(&stream);
+  n = ts_unpack_buffer(&ts, &buffer);
   buffer_destruct(&buffer);
+  if (n == -1)
+    errx(1, "ts_construct_buffer");
 
+  ts_close(&ts);
   ts_debug(&ts);
   resync(&ts);
 
   buffer_construct(&buffer);
-  stream_construct_buffer(&stream, &buffer);
-  ts_pack(&ts, &stream);
+  ts_pack_buffer(&ts, &buffer);
   ts_destruct(&ts);
-  stream_destruct(&stream);
 
-  e = save(&buffer, argv[2]);
-  if (e == -1)
-    err(1, "save %s\n", argv[2]);
+  n = buffer_save(&buffer, argv[2]);
   buffer_destruct(&buffer);
+  if (n == -1)
+    err(1, "save %s\n", argv[2]);
 }
